@@ -1,0 +1,234 @@
+/**
+ * CD Pipeline - Deploy to ECS
+ * 
+ * This pipeline:
+ * 1. Gets the image version to deploy
+ * 2. Updates ECS task definitions with new images
+ * 3. Deploys new task definitions to ECS services
+ */
+
+pipeline {
+    agent any
+    
+    parameters {
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: 'latest',
+            description: 'Docker image tag to deploy (e.g., build number, git commit, or "latest")'
+        )
+        choice(
+            name: 'SERVICE',
+            choices: ['both', 'service1', 'service2'],
+            description: 'Which service(s) to deploy'
+        )
+    }
+    
+    environment {
+        AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        PROJECT_NAME = 'checkpoint-exam'
+        ENVIRONMENT = 'dev'
+        
+        // ECS configuration
+        ECS_CLUSTER = "${PROJECT_NAME}-cluster-${ENVIRONMENT}"
+        SERVICE1_NAME = "${PROJECT_NAME}-service1"
+        SERVICE2_NAME = "${PROJECT_NAME}-service2"
+        
+        // Image URLs
+        SERVICE1_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/service1:${params.IMAGE_TAG}"
+        SERVICE2_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/service2:${params.IMAGE_TAG}"
+    }
+    
+    stages {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    echo "Deploying image tag: ${params.IMAGE_TAG}"
+                    echo "Target service(s): ${params.SERVICE}"
+                }
+            }
+        }
+        
+        stage('Verify Images Exist') {
+            steps {
+                withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+                    script {
+                        if (params.SERVICE == 'both' || params.SERVICE == 'service1') {
+                            sh """
+                                aws ecr describe-images \
+                                    --repository-name ${PROJECT_NAME}/service1 \
+                                    --image-ids imageTag=${params.IMAGE_TAG} \
+                                    --region ${AWS_REGION}
+                            """
+                        }
+                        if (params.SERVICE == 'both' || params.SERVICE == 'service2') {
+                            sh """
+                                aws ecr describe-images \
+                                    --repository-name ${PROJECT_NAME}/service2 \
+                                    --image-ids imageTag=${params.IMAGE_TAG} \
+                                    --region ${AWS_REGION}
+                            """
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy Service 1') {
+            when {
+                expression { params.SERVICE == 'both' || params.SERVICE == 'service1' }
+            }
+            steps {
+                withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+                    script {
+                        // Get current task definition
+                        def taskDef = sh(
+                            script: """
+                                aws ecs describe-task-definition \
+                                    --task-definition ${PROJECT_NAME}-service1 \
+                                    --query 'taskDefinition' \
+                                    --output json
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Update image in task definition
+                        def updatedTaskDef = sh(
+                            script: """
+                                echo '${taskDef}' | jq '.containerDefinitions[0].image = "${SERVICE1_IMAGE}"' | \
+                                jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Register new task definition
+                        writeFile file: 'task-def-service1.json', text: updatedTaskDef
+                        
+                        def newTaskDefArn = sh(
+                            script: """
+                                aws ecs register-task-definition \
+                                    --cli-input-json file://task-def-service1.json \
+                                    --query 'taskDefinition.taskDefinitionArn' \
+                                    --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "New task definition: ${newTaskDefArn}"
+                        
+                        // Update service
+                        sh """
+                            aws ecs update-service \
+                                --cluster ${ECS_CLUSTER} \
+                                --service ${SERVICE1_NAME} \
+                                --task-definition ${newTaskDefArn} \
+                                --force-new-deployment
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy Service 2') {
+            when {
+                expression { params.SERVICE == 'both' || params.SERVICE == 'service2' }
+            }
+            steps {
+                withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+                    script {
+                        // Get current task definition
+                        def taskDef = sh(
+                            script: """
+                                aws ecs describe-task-definition \
+                                    --task-definition ${PROJECT_NAME}-service2 \
+                                    --query 'taskDefinition' \
+                                    --output json
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Update image in task definition
+                        def updatedTaskDef = sh(
+                            script: """
+                                echo '${taskDef}' | jq '.containerDefinitions[0].image = "${SERVICE2_IMAGE}"' | \
+                                jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Register new task definition
+                        writeFile file: 'task-def-service2.json', text: updatedTaskDef
+                        
+                        def newTaskDefArn = sh(
+                            script: """
+                                aws ecs register-task-definition \
+                                    --cli-input-json file://task-def-service2.json \
+                                    --query 'taskDefinition.taskDefinitionArn' \
+                                    --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "New task definition: ${newTaskDefArn}"
+                        
+                        // Update service
+                        sh """
+                            aws ecs update-service \
+                                --cluster ${ECS_CLUSTER} \
+                                --service ${SERVICE2_NAME} \
+                                --task-definition ${newTaskDefArn} \
+                                --force-new-deployment
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Wait for Deployment') {
+            steps {
+                withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+                    script {
+                        if (params.SERVICE == 'both' || params.SERVICE == 'service1') {
+                            echo "Waiting for Service 1 deployment..."
+                            sh """
+                                aws ecs wait services-stable \
+                                    --cluster ${ECS_CLUSTER} \
+                                    --services ${SERVICE1_NAME} \
+                                    --region ${AWS_REGION}
+                            """
+                        }
+                        if (params.SERVICE == 'both' || params.SERVICE == 'service2') {
+                            echo "Waiting for Service 2 deployment..."
+                            sh """
+                                aws ecs wait services-stable \
+                                    --cluster ${ECS_CLUSTER} \
+                                    --services ${SERVICE2_NAME} \
+                                    --region ${AWS_REGION}
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo """
+            ✅ CD Pipeline Successful!
+            
+            Deployed to: ${ECS_CLUSTER}
+            Image tag: ${params.IMAGE_TAG}
+            Service(s): ${params.SERVICE}
+            """
+        }
+        failure {
+            echo '❌ CD Pipeline Failed!'
+        }
+        cleanup {
+            // Clean up temporary files
+            sh 'rm -f task-def-*.json || true'
+        }
+    }
+}

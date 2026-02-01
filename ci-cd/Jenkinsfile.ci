@@ -1,0 +1,165 @@
+/**
+ * CI Pipeline - Test, Build and Push Docker Images
+ * 
+ * This pipeline:
+ * 1. Checks out the code
+ * 2. Runs unit tests for both microservices
+ * 3. Builds Docker images for both microservices
+ * 4. Pushes images to ECR with version tags
+ */
+
+pipeline {
+    agent any
+    
+    environment {
+        AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        PROJECT_NAME = 'checkpoint-exam'
+        
+        // Image names
+        SERVICE1_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/service1"
+        SERVICE2_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/service2"
+        
+        // Version tag (use build number or git commit)
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    // Get short git commit hash for tagging
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+        
+        stage('Test Service 1') {
+            steps {
+                dir('microservices/service1') {
+                    sh '''
+                        python -m venv venv
+                        . venv/bin/activate
+                        pip install -r requirements.txt
+                        pytest test_app.py -v --junitxml=test-results.xml --cov=app --cov-report=xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit 'microservices/service1/test-results.xml'
+                }
+            }
+        }
+        
+        stage('Test Service 2') {
+            steps {
+                dir('microservices/service2') {
+                    sh '''
+                        python -m venv venv
+                        . venv/bin/activate
+                        pip install -r requirements.txt
+                        pytest test_app.py -v --junitxml=test-results.xml --cov=app --cov-report=xml
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit 'microservices/service2/test-results.xml'
+                }
+            }
+        }
+        
+        stage('Login to ECR') {
+            steps {
+                withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+                    sh '''
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    '''
+                }
+            }
+        }
+        
+        stage('Build Service 1') {
+            steps {
+                dir('microservices/service1') {
+                    sh """
+                        docker build -t ${SERVICE1_IMAGE}:${IMAGE_TAG} .
+                        docker tag ${SERVICE1_IMAGE}:${IMAGE_TAG} ${SERVICE1_IMAGE}:latest
+                        docker tag ${SERVICE1_IMAGE}:${IMAGE_TAG} ${SERVICE1_IMAGE}:${GIT_COMMIT_SHORT}
+                    """
+                }
+            }
+        }
+        
+        stage('Build Service 2') {
+            steps {
+                dir('microservices/service2') {
+                    sh """
+                        docker build -t ${SERVICE2_IMAGE}:${IMAGE_TAG} .
+                        docker tag ${SERVICE2_IMAGE}:${IMAGE_TAG} ${SERVICE2_IMAGE}:latest
+                        docker tag ${SERVICE2_IMAGE}:${IMAGE_TAG} ${SERVICE2_IMAGE}:${GIT_COMMIT_SHORT}
+                    """
+                }
+            }
+        }
+        
+        stage('Push Service 1') {
+            steps {
+                sh """
+                    docker push ${SERVICE1_IMAGE}:${IMAGE_TAG}
+                    docker push ${SERVICE1_IMAGE}:latest
+                    docker push ${SERVICE1_IMAGE}:${GIT_COMMIT_SHORT}
+                """
+            }
+        }
+        
+        stage('Push Service 2') {
+            steps {
+                sh """
+                    docker push ${SERVICE2_IMAGE}:${IMAGE_TAG}
+                    docker push ${SERVICE2_IMAGE}:latest
+                    docker push ${SERVICE2_IMAGE}:${GIT_COMMIT_SHORT}
+                """
+            }
+        }
+        
+        stage('Cleanup') {
+            steps {
+                sh '''
+                    docker rmi ${SERVICE1_IMAGE}:${IMAGE_TAG} || true
+                    docker rmi ${SERVICE2_IMAGE}:${IMAGE_TAG} || true
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo """
+            ✅ CI Pipeline Successful!
+            
+            Tests: PASSED
+            Images pushed:
+            - ${SERVICE1_IMAGE}:${IMAGE_TAG}
+            - ${SERVICE2_IMAGE}:${IMAGE_TAG}
+            
+            Git commit: ${GIT_COMMIT_SHORT}
+            """
+        }
+        failure {
+            echo '❌ CI Pipeline Failed!'
+        }
+        always {
+            // Clean up Docker images and virtual environments
+            sh 'docker system prune -f || true'
+            sh 'rm -rf microservices/service1/venv microservices/service2/venv || true'
+        }
+    }
+}
