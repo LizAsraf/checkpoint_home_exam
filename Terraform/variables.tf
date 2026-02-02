@@ -5,7 +5,7 @@ variable "aws_region" {
 }
 
 variable "environment" {
-  description = "Environment name (e.g., dev, staging, prod)"
+  description = "Environment name"
   type        = string
   default     = "dev"
 }
@@ -28,9 +28,8 @@ variable "availability_zones" {
   default     = ["us-east-1a", "us-east-1b"]
 }
 
-# ECS Configuration
 variable "ecs_instance_type" {
-  description = "EC2 instance type for ECS instances. t2.micro is free tier eligible."
+  description = "EC2 instance type for ECS"
   type        = string
   default     = "t2.micro"
 }
@@ -53,21 +52,26 @@ variable "ecs_max_size" {
   default     = 2
 }
 
-# Microservice images
 variable "service1_image" {
-  description = "Docker image for microservice 1 (REST API). Update after building."
+  description = "Docker image for service 1"
   type        = string
   default     = "amazon/amazon-ecs-sample"
 }
 
 variable "service2_image" {
-  description = "Docker image for microservice 2 (SQS worker). Update after building."
+  description = "Docker image for service 2"
   type        = string
   default     = "amazon/amazon-ecs-sample"
 }
 
+variable "enable_monitoring" {
+  description = "Enable CloudWatch monitoring"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
-  description = "Additional tags to apply to resources"
+  description = "Additional tags"
   type        = map(string)
   default     = {}
 }

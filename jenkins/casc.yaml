@@ -1,0 +1,87 @@
+jenkins:
+  systemMessage: "Checkpoint DevOps Exam - Jenkins CI/CD"
+  numExecutors: 2
+  mode: NORMAL
+  
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD:-admin}"
+  
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "AWS_REGION"
+            value: "${AWS_REGION:-us-east-1}"
+          - key: "PROJECT_NAME"
+            value: "checkpoint-exam"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - aws:
+              id: "aws-credentials"
+              description: "AWS Credentials for ECR and ECS"
+              accessKey: "${AWS_ACCESS_KEY_ID}"
+              secretKey: "${AWS_SECRET_ACCESS_KEY}"
+          - string:
+              id: "aws-account-id"
+              description: "AWS Account ID"
+              secret: "${AWS_ACCOUNT_ID}"
+
+jobs:
+  - script: |
+      pipelineJob('checkpoint-exam-ci') {
+        description('CI Pipeline - Build and Push Docker Images to ECR')
+        
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://github.com/LizAsraf/checkpoint_home_exam.git')
+                }
+                branches('*/main')
+              }
+            }
+            scriptPath('ci-cd/Jenkinsfile.ci')
+            lightweight(true)
+          }
+        }
+      }
+      
+  - script: |
+      pipelineJob('checkpoint-exam-cd') {
+        description('CD Pipeline - Deploy to ECS')
+        
+        parameters {
+          stringParam('IMAGE_TAG', 'latest', 'Docker image tag to deploy')
+          choiceParam('SERVICE', ['both', 'service1', 'service2'], 'Which service to deploy')
+        }
+        
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://github.com/LizAsraf/checkpoint_home_exam.git')
+                }
+                branches('*/main')
+              }
+            }
+            scriptPath('ci-cd/Jenkinsfile.cd')
+            lightweight(true)
+          }
+        }
+      }
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"

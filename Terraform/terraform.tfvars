@@ -1,10 +1,10 @@
-aws_region   = "us-east-1"
+aws_region   = "us-west-2"
 environment  = "dev"
 project_name = "checkpoint-exam"
 
 # VPC
 vpc_cidr           = "10.0.0.0/16"
-availability_zones = ["us-east-1a", "us-east-1b"]
+availability_zones = ["us-west-2a", "us-west-2b"]
 
 # ECS - Free Tier Configuration
 ecs_instance_type    = "t2.micro"  # Free tier eligible (750 hrs/month)

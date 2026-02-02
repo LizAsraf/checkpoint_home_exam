@@ -1,12 +1,3 @@
-/**
- * CD Pipeline - Deploy to ECS
- * 
- * This pipeline:
- * 1. Gets the image version to deploy
- * 2. Updates ECS task definitions with new images
- * 3. Deploys new task definitions to ECS services
- */
-
 pipeline {
     agent any
     
@@ -14,7 +5,7 @@ pipeline {
         string(
             name: 'IMAGE_TAG',
             defaultValue: 'latest',
-            description: 'Docker image tag to deploy (e.g., build number, git commit, or "latest")'
+            description: 'Docker image tag to deploy'
         )
         choice(
             name: 'SERVICE',
@@ -30,12 +21,10 @@ pipeline {
         PROJECT_NAME = 'checkpoint-exam'
         ENVIRONMENT = 'dev'
         
-        // ECS configuration
         ECS_CLUSTER = "${PROJECT_NAME}-cluster-${ENVIRONMENT}"
         SERVICE1_NAME = "${PROJECT_NAME}-service1"
         SERVICE2_NAME = "${PROJECT_NAME}-service2"
         
-        // Image URLs
         SERVICE1_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/service1:${params.IMAGE_TAG}"
         SERVICE2_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/service2:${params.IMAGE_TAG}"
     }
@@ -82,7 +71,6 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
                     script {
-                        // Get current task definition
                         def taskDef = sh(
                             script: """
                                 aws ecs describe-task-definition \
@@ -93,7 +81,6 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         
-                        // Update image in task definition
                         def updatedTaskDef = sh(
                             script: """
                                 echo '${taskDef}' | jq '.containerDefinitions[0].image = "${SERVICE1_IMAGE}"' | \
@@ -102,7 +89,6 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         
-                        // Register new task definition
                         writeFile file: 'task-def-service1.json', text: updatedTaskDef
                         
                         def newTaskDefArn = sh(
@@ -117,7 +103,6 @@ pipeline {
                         
                         echo "New task definition: ${newTaskDefArn}"
                         
-                        // Update service
                         sh """
                             aws ecs update-service \
                                 --cluster ${ECS_CLUSTER} \
@@ -137,7 +122,6 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
                     script {
-                        // Get current task definition
                         def taskDef = sh(
                             script: """
                                 aws ecs describe-task-definition \
@@ -148,7 +132,6 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         
-                        // Update image in task definition
                         def updatedTaskDef = sh(
                             script: """
                                 echo '${taskDef}' | jq '.containerDefinitions[0].image = "${SERVICE2_IMAGE}"' | \
@@ -157,7 +140,6 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         
-                        // Register new task definition
                         writeFile file: 'task-def-service2.json', text: updatedTaskDef
                         
                         def newTaskDefArn = sh(
@@ -172,7 +154,6 @@ pipeline {
                         
                         echo "New task definition: ${newTaskDefArn}"
                         
-                        // Update service
                         sh """
                             aws ecs update-service \
                                 --cluster ${ECS_CLUSTER} \
@@ -215,19 +196,12 @@ pipeline {
     
     post {
         success {
-            echo """
-            ✅ CD Pipeline Successful!
-            
-            Deployed to: ${ECS_CLUSTER}
-            Image tag: ${params.IMAGE_TAG}
-            Service(s): ${params.SERVICE}
-            """
+            echo "CD Pipeline Successful - Deployed ${params.IMAGE_TAG} to ${ECS_CLUSTER}"
         }
         failure {
-            echo '❌ CD Pipeline Failed!'
+            echo 'CD Pipeline Failed'
         }
         cleanup {
-            // Clean up temporary files
             sh 'rm -f task-def-*.json || true'
         }
     }

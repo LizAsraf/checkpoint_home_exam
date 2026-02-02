@@ -84,13 +84,13 @@ output "ecr_service2_url" {
   value       = module.ecr.service2_repository_url
 }
 
-# Monitoring outputs
+# Monitoring outputs (only available when enable_monitoring = true)
 output "cloudwatch_dashboard_name" {
   description = "Name of the CloudWatch dashboard"
-  value       = module.monitoring.dashboard_name
+  value       = var.enable_monitoring ? module.monitoring[0].dashboard_name : null
 }
 
 output "cloudwatch_dashboard_url" {
   description = "URL to the CloudWatch dashboard"
-  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${module.monitoring.dashboard_name}"
+  value       = var.enable_monitoring ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${module.monitoring[0].dashboard_name}" : null
 }

@@ -1,6 +1,3 @@
-# Main Terraform configuration - orchestrates all modules
-# Dependency order: networking → security → ecs, sqs, s3, ssm
-
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
@@ -86,6 +83,7 @@ module "ecs" {
 
 module "monitoring" {
   source = "./modules/monitoring"
+  count  = var.enable_monitoring ? 1 : 0
 
   project_name            = var.project_name
   environment             = var.environment

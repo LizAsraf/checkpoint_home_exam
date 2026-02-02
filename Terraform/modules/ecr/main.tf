@@ -1,5 +1,3 @@
-# ECR Repositories for microservices
-
 resource "aws_ecr_repository" "service1" {
   name                 = "${var.project_name}/service1"
   image_tag_mutability = "MUTABLE"
@@ -32,7 +30,6 @@ resource "aws_ecr_repository" "service2" {
   )
 }
 
-# Lifecycle policy to clean up old images
 resource "aws_ecr_lifecycle_policy" "service1" {
   repository = aws_ecr_repository.service1.name
 

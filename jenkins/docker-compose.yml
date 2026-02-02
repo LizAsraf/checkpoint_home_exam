@@ -1,0 +1,35 @@
+services:
+  jenkins:
+    image: docker.io/jenkins/jenkins:2.492.3-jdk21
+    container_name: jenkins
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - ./casc:/var/jenkins_home/casc
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc/jenkins.yaml
+      - JAVA_OPTS="-Djava.net.preferIPv4Stack=true"
+      - JENKINS_UC=https://updates.jenkins.io/current
+      - JENKINS_UC_DOWNLOAD=https://updates.jenkins.io/download
+      - JENKINS_INCREMENTALS_REPO_MIRROR=https://repo.jenkins-ci.org/incrementals
+    networks:
+      - jenkins-network
+
+volumes:
+  jenkins_home:
+    name: jenkins_home
+
+networks:
+  jenkins-network:
+    name: jenkins-network

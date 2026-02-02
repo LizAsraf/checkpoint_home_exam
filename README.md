@@ -69,10 +69,16 @@ checkpoint_home_exam/
 │       ├── test_app.py          # Unit tests
 │       ├── Dockerfile
 │       └── requirements.txt
-└── ci-cd/
-    ├── Jenkinsfile.ci            # CI: Build & push images
-    ├── Jenkinsfile.cd            # CD: Deploy to ECS
-    └── README.md                 # Jenkins setup guide
+├── ci-cd/
+│   ├── Jenkinsfile.ci            # CI: Build & push images
+│   ├── Jenkinsfile.cd            # CD: Deploy to ECS
+│   └── README.md                 # Pipeline documentation
+└── jenkins/                      # Jenkins IaC (Docker)
+    ├── docker-compose.yml        # Docker Compose config
+    ├── casc.yaml                 # Jenkins Configuration as Code
+    ├── plugins.txt               # Required plugins list
+    ├── .env.example              # Environment variables template
+    └── README.md                 # Setup instructions
 ```
 
 ## Prerequisites
@@ -220,9 +226,29 @@ pytest test_app.py -v
 
 ## CI/CD Pipeline
 
-### Jenkins Setup
+### Start Jenkins Locally (IaC with Docker)
 
-See `ci-cd/README.md` for detailed Jenkins configuration.
+```bash
+cd jenkins
+cp .env.example .env
+# Edit .env with your AWS credentials
+docker-compose up -d
+```
+
+Open http://localhost:8080 (admin/admin)
+
+### Configure AWS Credentials in Jenkins
+
+1. Go to **Manage Jenkins → Credentials → Global**
+2. Add **AWS Credentials** (ID: `aws-credentials`)
+3. Add **Secret text** with AWS Account ID (ID: `aws-account-id`)
+
+### Pre-configured Jobs
+
+| Job | Trigger | Description |
+|-----|---------|-------------|
+| `checkpoint-exam-ci` | Build Now | Runs tests, builds images, pushes to ECR |
+| `checkpoint-exam-cd` | Build with Parameters | Deploys specified version to ECS |
 
 ### CI Pipeline (Jenkinsfile.ci)
 - Runs unit tests for both services
@@ -234,6 +260,13 @@ See `ci-cd/README.md` for detailed Jenkins configuration.
 - Updates ECS task definitions
 - Deploys to ECS cluster
 - Waits for stable deployment
+
+### Stop Jenkins
+
+```bash
+cd jenkins
+docker-compose down
+```
 
 ---
 

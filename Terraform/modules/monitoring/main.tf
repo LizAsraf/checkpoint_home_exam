@@ -1,15 +1,8 @@
-# CloudWatch Monitoring - Dashboard and Alarms
-
-# ============================================
-# CloudWatch Dashboard
-# ============================================
-
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-dashboard-${var.environment}"
 
   dashboard_body = jsonencode({
     widgets = [
-      # ECS Cluster Metrics
       {
         type   = "text"
         x      = 0
@@ -65,8 +58,6 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
         }
       },
-
-      # ALB Metrics
       {
         type   = "text"
         x      = 0
@@ -123,8 +114,6 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
         }
       },
-
-      # SQS Metrics
       {
         type   = "text"
         x      = 0
@@ -181,8 +170,6 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
         }
       },
-
-      # S3 Metrics
       {
         type   = "text"
         x      = 0
@@ -225,11 +212,6 @@ resource "aws_cloudwatch_dashboard" "main" {
   })
 }
 
-# ============================================
-# CloudWatch Alarms
-# ============================================
-
-# High CPU Alarm
 resource "aws_cloudwatch_metric_alarm" "ecs_high_cpu" {
   alarm_name          = "${var.project_name}-ecs-high-cpu-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -251,7 +233,6 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_cpu" {
   tags = var.tags
 }
 
-# High Memory Alarm
 resource "aws_cloudwatch_metric_alarm" "ecs_high_memory" {
   alarm_name          = "${var.project_name}-ecs-high-memory-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -273,7 +254,6 @@ resource "aws_cloudwatch_metric_alarm" "ecs_high_memory" {
   tags = var.tags
 }
 
-# ALB 5XX Errors Alarm
 resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
   alarm_name          = "${var.project_name}-alb-5xx-errors-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -295,7 +275,6 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx_errors" {
   tags = var.tags
 }
 
-# SQS Queue Depth Alarm (messages building up)
 resource "aws_cloudwatch_metric_alarm" "sqs_queue_depth" {
   alarm_name          = "${var.project_name}-sqs-queue-depth-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -317,7 +296,6 @@ resource "aws_cloudwatch_metric_alarm" "sqs_queue_depth" {
   tags = var.tags
 }
 
-# SQS Message Age Alarm (messages stuck in queue)
 resource "aws_cloudwatch_metric_alarm" "sqs_message_age" {
   alarm_name          = "${var.project_name}-sqs-message-age-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
@@ -326,7 +304,7 @@ resource "aws_cloudwatch_metric_alarm" "sqs_message_age" {
   namespace           = "AWS/SQS"
   period              = 300
   statistic           = "Maximum"
-  threshold           = 3600  # 1 hour
+  threshold           = 3600
   alarm_description   = "SQS has messages older than 1 hour"
 
   dimensions = {
@@ -339,7 +317,6 @@ resource "aws_cloudwatch_metric_alarm" "sqs_message_age" {
   tags = var.tags
 }
 
-# ALB Unhealthy Hosts Alarm
 resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
   alarm_name          = "${var.project_name}-alb-unhealthy-hosts-${var.environment}"
   comparison_operator = "GreaterThanThreshold"

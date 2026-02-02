@@ -1,9 +1,3 @@
-"""
-Microservice 2 - SQS Worker
-- Polls SQS queue for messages
-- Uploads messages to S3 bucket
-"""
-
 import os
 import json
 import time
@@ -13,28 +7,24 @@ from datetime import datetime
 import boto3
 from botocore.exceptions import ClientError
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration from environment variables
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 SQS_QUEUE_URL = os.environ.get('SQS_QUEUE_URL')
 S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
-POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '10'))  # seconds
+POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '10'))
 
-# AWS clients
 sqs_client = boto3.client('sqs', region_name=AWS_REGION)
 s3_client = boto3.client('s3', region_name=AWS_REGION)
 
 
 def poll_sqs():
-    """Poll SQS for messages."""
     try:
         response = sqs_client.receive_message(
             QueueUrl=SQS_QUEUE_URL,
             MaxNumberOfMessages=10,
-            WaitTimeSeconds=20,  # Long polling
+            WaitTimeSeconds=20,
             MessageAttributeNames=['All']
         )
         
@@ -48,17 +38,11 @@ def poll_sqs():
 
 
 def upload_to_s3(message_body, message_id):
-    """Upload message content to S3."""
     try:
-        # Parse message body
         data = json.loads(message_body)
-        
-        # Generate S3 key with timestamp and message ID
         timestamp = datetime.utcnow().strftime('%Y/%m/%d/%H')
         file_name = f"{message_id}_{uuid.uuid4().hex[:8]}.json"
         s3_key = f"messages/{timestamp}/{file_name}"
-        
-        # Add metadata
         content = {
             'data': data,
             'metadata': {
@@ -67,8 +51,6 @@ def upload_to_s3(message_body, message_id):
                 'source': 'microservice2'
             }
         }
-        
-        # Upload to S3
         s3_client.put_object(
             Bucket=S3_BUCKET_NAME,
             Key=s3_key,
@@ -88,7 +70,6 @@ def upload_to_s3(message_body, message_id):
 
 
 def delete_message(receipt_handle):
-    """Delete processed message from SQS."""
     try:
         sqs_client.delete_message(
             QueueUrl=SQS_QUEUE_URL,
@@ -101,7 +82,6 @@ def delete_message(receipt_handle):
 
 
 def process_message(message):
-    """Process a single message: upload to S3 and delete from queue."""
     message_id = message['MessageId']
     receipt_handle = message['ReceiptHandle']
     body = message['Body']
@@ -124,7 +104,6 @@ def process_message(message):
 
 
 def run_worker():
-    """Main worker loop."""
     logger.info("Starting SQS Worker")
     logger.info(f"SQS Queue: {SQS_QUEUE_URL}")
     logger.info(f"S3 Bucket: {S3_BUCKET_NAME}")
@@ -135,21 +114,16 @@ def run_worker():
     
     while True:
         try:
-            # Poll for messages
             messages = poll_sqs()
-            
-            # Process each message
             for message in messages:
                 if process_message(message):
                     processed_count += 1
                 else:
                     error_count += 1
             
-            # Log stats periodically
             if processed_count > 0 or error_count > 0:
                 logger.info(f"Stats - Processed: {processed_count}, Errors: {error_count}")
             
-            # If no messages, wait before polling again
             if not messages:
                 time.sleep(POLL_INTERVAL)
                 
@@ -162,7 +136,6 @@ def run_worker():
 
 
 if __name__ == '__main__':
-    # Validate required environment variables
     if not SQS_QUEUE_URL:
         raise ValueError("SQS_QUEUE_URL environment variable is required")
     if not S3_BUCKET_NAME:

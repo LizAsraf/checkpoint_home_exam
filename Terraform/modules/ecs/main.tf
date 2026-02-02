@@ -1,17 +1,14 @@
-# ECS Cluster with EC2 Launch Type (Free Tier eligible)
-
 # Get latest ECS-optimized AMI
 data "aws_ssm_parameter" "ecs_ami" {
   name = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
 }
 
-# ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster-${var.environment}"
 
   setting {
     name  = "containerInsights"
-    value = "disabled"  # Disabled to stay free tier
+    value = "disabled"
   }
 
   tags = merge(
@@ -22,7 +19,6 @@ resource "aws_ecs_cluster" "main" {
   )
 }
 
-# Launch Template for EC2 instances
 resource "aws_launch_template" "ecs" {
   name_prefix   = "${var.project_name}-ecs-"
   image_id      = data.aws_ssm_parameter.ecs_ami.value
@@ -57,7 +53,6 @@ resource "aws_launch_template" "ecs" {
   tags = var.tags
 }
 
-# Auto Scaling Group for ECS instances
 resource "aws_autoscaling_group" "ecs" {
   name                = "${var.project_name}-ecs-asg-${var.environment}"
   vpc_zone_identifier = var.private_subnet_ids
@@ -87,7 +82,6 @@ resource "aws_autoscaling_group" "ecs" {
   }
 }
 
-# ECS Capacity Provider
 resource "aws_ecs_capacity_provider" "main" {
   name = "${var.project_name}-capacity-provider-${var.environment}"
 
@@ -106,7 +100,6 @@ resource "aws_ecs_capacity_provider" "main" {
   tags = var.tags
 }
 
-# Associate Capacity Provider with Cluster
 resource "aws_ecs_cluster_capacity_providers" "main" {
   cluster_name       = aws_ecs_cluster.main.name
   capacity_providers = [aws_ecs_capacity_provider.main.name]
@@ -118,7 +111,6 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   }
 }
 
-# Application Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb-${var.environment}"
   internal           = false
@@ -134,7 +126,6 @@ resource "aws_lb" "main" {
   )
 }
 
-# ALB Target Group for Microservice 1
 resource "aws_lb_target_group" "service1" {
   name        = "${var.project_name}-svc1-tg-${var.environment}"
   port        = 8080
@@ -157,7 +148,6 @@ resource "aws_lb_target_group" "service1" {
   tags = var.tags
 }
 
-# ALB Listener
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
@@ -171,7 +161,6 @@ resource "aws_lb_listener" "http" {
   tags = var.tags
 }
 
-# CloudWatch Log Groups for services
 resource "aws_cloudwatch_log_group" "service1" {
   name              = "/ecs/${var.project_name}/service1"
   retention_in_days = 7
@@ -186,7 +175,6 @@ resource "aws_cloudwatch_log_group" "service2" {
   tags = var.tags
 }
 
-# Task Definition for Microservice 1 (REST API)
 resource "aws_ecs_task_definition" "service1" {
   family                   = "${var.project_name}-service1"
   network_mode             = "bridge"
@@ -205,7 +193,7 @@ resource "aws_ecs_task_definition" "service1" {
       portMappings = [
         {
           containerPort = 8080
-          hostPort      = 0  # Dynamic port mapping
+          hostPort      = 0
           protocol      = "tcp"
         }
       ]
@@ -239,7 +227,6 @@ resource "aws_ecs_task_definition" "service1" {
   tags = var.tags
 }
 
-# Task Definition for Microservice 2 (SQS Worker)
 resource "aws_ecs_task_definition" "service2" {
   family                   = "${var.project_name}-service2"
   network_mode             = "bridge"
@@ -284,7 +271,6 @@ resource "aws_ecs_task_definition" "service2" {
   tags = var.tags
 }
 
-# ECS Service for Microservice 1
 resource "aws_ecs_service" "service1" {
   name            = "${var.project_name}-service1"
   cluster         = aws_ecs_cluster.main.id
@@ -311,7 +297,6 @@ resource "aws_ecs_service" "service1" {
   tags = var.tags
 }
 
-# ECS Service for Microservice 2
 resource "aws_ecs_service" "service2" {
   name            = "${var.project_name}-service2"
   cluster         = aws_ecs_cluster.main.id
